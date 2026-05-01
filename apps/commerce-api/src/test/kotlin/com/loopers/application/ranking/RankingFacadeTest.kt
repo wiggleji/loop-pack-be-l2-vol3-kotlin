@@ -5,6 +5,7 @@ import com.loopers.domain.catalog.brand.BrandRepository
 import com.loopers.domain.catalog.product.Product
 import com.loopers.domain.catalog.product.ProductRepository
 import com.loopers.domain.ranking.RankingKeyPolicy
+import com.loopers.domain.ranking.RankingPeriod
 import com.loopers.support.error.CoreException
 import com.loopers.support.error.ErrorType
 import com.loopers.utils.DatabaseCleanUp
@@ -65,7 +66,7 @@ class RankingFacadeTest @Autowired constructor(
             zadd(todayKey, p3.id, 3.0)
 
             // Act
-            val result = rankingFacade.getRankingPage(dateString = null, page = 1, size = 10)
+            val result = rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = null, page = 1, size = 10)
 
             // Assert
             assertThat(result.totalCount).isEqualTo(3L)
@@ -94,7 +95,7 @@ class RankingFacadeTest @Autowired constructor(
             products.forEachIndexed { idx, p -> zadd(todayKey, p.id, (idx + 1).toDouble()) }
 
             // size=2, page=2 → 3rd, 4th 위치
-            val result = rankingFacade.getRankingPage(dateString = null, page = 2, size = 2)
+            val result = rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = null, page = 2, size = 2)
 
             assertThat(result.items).hasSize(2)
             assertThat(result.items[0].rank).isEqualTo(2L)
@@ -105,7 +106,7 @@ class RankingFacadeTest @Autowired constructor(
 
         @Test
         fun `랭킹 ZSET 이 비어있으면 빈 items 와 totalCount 0 을 반환한다`() {
-            val result = rankingFacade.getRankingPage(dateString = null, page = 1, size = 20)
+            val result = rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = null, page = 1, size = 20)
 
             assertThat(result.totalCount).isEqualTo(0L)
             assertThat(result.items).isEmpty()
@@ -118,7 +119,7 @@ class RankingFacadeTest @Autowired constructor(
             zadd(todayKey, p1.id, 5.0)
             zadd(todayKey, 999_999L, 10.0) // 존재하지 않는 productId
 
-            val result = rankingFacade.getRankingPage(dateString = null, page = 1, size = 10)
+            val result = rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = null, page = 1, size = 10)
 
             assertThat(result.items).hasSize(1)
             assertThat(result.items[0].productId).isEqualTo(p1.id)
@@ -127,7 +128,7 @@ class RankingFacadeTest @Autowired constructor(
         @Test
         fun `date 가 yyyyMMdd 가 아니면 BAD_REQUEST`() {
             val ex = assertThrows<CoreException> {
-                rankingFacade.getRankingPage(dateString = "2026-04-08", page = 1, size = 20)
+                rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = "2026-04-08", page = 1, size = 20)
             }
             assertThat(ex.errorType).isEqualTo(ErrorType.BAD_REQUEST)
         }
@@ -135,7 +136,7 @@ class RankingFacadeTest @Autowired constructor(
         @Test
         fun `page 가 0 이하면 BAD_REQUEST`() {
             val ex = assertThrows<CoreException> {
-                rankingFacade.getRankingPage(dateString = null, page = 0, size = 20)
+                rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = null, page = 0, size = 20)
             }
             assertThat(ex.errorType).isEqualTo(ErrorType.BAD_REQUEST)
         }
@@ -143,7 +144,7 @@ class RankingFacadeTest @Autowired constructor(
         @Test
         fun `size 가 100 초과면 BAD_REQUEST`() {
             val ex = assertThrows<CoreException> {
-                rankingFacade.getRankingPage(dateString = null, page = 1, size = 101)
+                rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = null, page = 1, size = 101)
             }
             assertThat(ex.errorType).isEqualTo(ErrorType.BAD_REQUEST)
         }
@@ -157,7 +158,7 @@ class RankingFacadeTest @Autowired constructor(
             zadd(yKey, p1.id, 1.0)
 
             val yString = yesterday.format(DateTimeFormatter.ofPattern("yyyyMMdd"))
-            val result = rankingFacade.getRankingPage(dateString = yString, page = 1, size = 10)
+            val result = rankingFacade.getRankingPage(period = RankingPeriod.DAILY, dateString = yString, page = 1, size = 10)
 
             assertThat(result.items).hasSize(1)
             assertThat(result.items[0].productId).isEqualTo(p1.id)

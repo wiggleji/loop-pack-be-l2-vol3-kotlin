@@ -6,7 +6,9 @@ import com.loopers.application.ranking.RankingPageResult
 class RankingV1Dto {
 
     data class RankingPageResponse(
-        val date: String,
+        val period: String, // DAILY|WEEKLY|MONTHLY
+        val periodKey: String, // yyyyMMdd | yyyy-Www | yyyy-MM
+        val date: String, // 입력 echo (yyyyMMdd)
         val page: Int,
         val size: Int,
         val totalCount: Long,
@@ -14,6 +16,8 @@ class RankingV1Dto {
     ) {
         companion object {
             fun from(result: RankingPageResult) = RankingPageResponse(
+                period = result.period.name,
+                periodKey = result.periodKey,
                 date = result.date,
                 page = result.page,
                 size = result.size,

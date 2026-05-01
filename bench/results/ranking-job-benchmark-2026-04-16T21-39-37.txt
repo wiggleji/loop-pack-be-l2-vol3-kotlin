@@ -1,0 +1,41 @@
+# Weekly Ranking Job — Chunk vs Tasklet wall-time benchmark
+# captured: 2026-04-16T21:39:37 KST
+# env: TestContainers MySQL (host: macOS, JVM: 21.0.10)
+# seeds: random ProductMetricsSeeder.seedRandom(seed=42L) — 결정적 분포
+# baseline: TOP_N=100, chunk size=25
+# raw output (gradle test --info | grep "[BENCH]"):
+
+[BENCH] job=weeklyRankingChunkJob   seed=1000   elapsedMs=171 exit=COMPLETED
+[BENCH] job=weeklyRankingChunkJob   seed=5000   elapsedMs=140 exit=COMPLETED
+[BENCH] job=weeklyRankingChunkJob   seed=10000  elapsedMs=103 exit=COMPLETED
+[BENCH] job=weeklyRankingChunkJob   seed=100000 elapsedMs=206 exit=COMPLETED
+[BENCH] job=weeklyRankingChunkJob   seed=300000 elapsedMs=579 exit=COMPLETED
+
+[BENCH] job=weeklyRankingTaskletJob seed=1000   elapsedMs=34  exit=COMPLETED
+[BENCH] job=weeklyRankingTaskletJob seed=5000   elapsedMs=37  exit=COMPLETED
+[BENCH] job=weeklyRankingTaskletJob seed=10000  elapsedMs=42  exit=COMPLETED
+[BENCH] job=weeklyRankingTaskletJob seed=100000 elapsedMs=143 exit=COMPLETED
+[BENCH] job=weeklyRankingTaskletJob seed=300000 elapsedMs=501 exit=COMPLETED
+
+# scaling 요약 (1k → 300k)
+#   chunk   : 171 → 579 ms   (×3.4)  — 1k~10k 구간은 JIT warm-up 영향으로 오히려 감소.
+#                                     100k 부터 Reader 의 ORDER BY score DESC LIMIT 100 비용
+#                                     (filesort, no index) 이 dominant 해지며 비례 증가.
+#   tasklet : 34  → 501 ms   (×14.7) — 단일 INSERT…SELECT 의 ROW_NUMBER + ORDER BY 가
+#                                     데이터셋 크기에 그대로 비례. 절대값은 chunk 보다 빠르나
+#                                     스케일링 곡선 자체가 더 가파름.
+#
+# 격차 수렴
+#   1k     : tasklet 이 5.0× 빠름
+#   10k    : tasklet 이 2.5× 빠름
+#   100k   : tasklet 이 1.4× 빠름
+#   300k   : tasklet 이 1.16× 빠름  ← 사실상 동일 영역
+#
+# notes
+# - 양쪽 모두 300k 까지도 sub-second — TOP-N=100 으로 결과 cardinality 고정 + filesort + LIMIT push-down.
+# - 100k → 300k 구간에서 chunk 와 tasklet 의 격차가 1.4× → 1.16× 로 좁아짐.
+#   더 큰 데이터셋 (수백만 row + score 컬럼 인덱스 부재) 에서는 추월할 가능성 있음.
+# - chunk 는 fetch(JdbcCursor) → process → JpaItemWriter 의 3단계 파이프라인이라 base cost 가 높지만,
+#   chunk 단위 회복 가능성·중간 상태 관측가능성 등 운영성에서 우위.
+# - 50k 이상 시드는 ProductMetricsSeeder 가 JdbcTemplate.batchUpdate(chunk 1000) 로 fallback —
+#   seed 자체는 측정 대상이 아님 (launchJob wall time 만 캡처).

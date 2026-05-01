@@ -1,7 +1,11 @@
 package com.loopers.application.ranking
 
+import com.loopers.domain.ranking.RankingPeriod
+
 data class RankingPageResult(
-    val date: String, // yyyyMMdd
+    val period: RankingPeriod, // DAILY|WEEKLY|MONTHLY
+    val periodKey: String, // DAILY: yyyyMMdd, WEEKLY: yyyy-Www, MONTHLY: yyyy-MM
+    val date: String, // 입력 echo (yyyyMMdd)
     val page: Int,
     val size: Int,
     val totalCount: Long,
