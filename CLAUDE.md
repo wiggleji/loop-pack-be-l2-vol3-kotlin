@@ -194,6 +194,42 @@ Create `week_notes/week-{N}.md` for every implementation:
 - Integration: [cases]
 ```
 
+## Domain & Object Design Strategy
+
+- **Domain objects own business rules.** Logic like "can this order be cancelled?" or "is this password valid?" belongs on the domain object (`Order.cancel()`, `User.validatePassword()`), not scattered across services. Services that contain domain rules become the bottleneck for every future change.
+- **Application services orchestrate, not decide.** An application service (use-case) assembles and sequences domain operations — e.g., `PlaceOrderService` checks user eligibility, reserves stock, and triggers payment — but it does not define what "eligible" means. Domain objects do.
+- **Duplication in services is a signal, not a pattern.** If `OrderService` and `ReviewService` both check "is the user active?", that rule belongs on `UserModel.requireActive()`. Repeating it in two services guarantees the two diverge over time.
+- **Clarify intent before coding.** For every feature, explicitly decide: is this a domain rule (lives in the model) or an orchestration step (lives in the service)? Record the decision in the weekly notes. Ambiguity left unresolved becomes tech debt.
+- **Keep domain objects framework-free.** Spring annotations and JPA concerns in domain models couple your business logic to infrastructure choices. Prefer plain Kotlin domain models and isolate persistence mapping to the infrastructure layer.
+
+## Architecture & Package Strategy
+
+> **DIP (Dependency Inversion Principle) is VIP — treat any violation as a build-breaking issue.**
+
+- **Dependency direction is strictly inward:** `Interfaces → Application → Domain ← Infrastructure`. The `Domain` layer knows nothing about Spring, JPA, or HTTP. `Infrastructure` implements `Domain` interfaces — it depends on `Domain`, not the other way around.
+- **Separate API DTOs from application DTOs.** `SignupRequest`/`UserResponse` (HTTP concerns) live in `interfaces/api/`; use-case inputs/outputs like `CreateUserCommand`/`UserResult` live in `application/`. Mixing them couples your API contract to your use-case logic, making both harder to change independently.
+- **4-layer package structure, domain-partitioned within each layer:**
+
+```
+interfaces/
+  api/
+    user/          ← UserV1Controller, SignupRequest, UserResponse
+    order/         ← OrderV1Controller, PlaceOrderRequest, OrderResponse
+application/
+  user/            ← CreateUserUseCase, CreateUserCommand, UserResult
+  order/           ← PlaceOrderUseCase, PlaceOrderCommand, OrderResult
+domain/
+  user/            ← UserModel, UserRepository (interface), UserDomainService
+  order/           ← OrderModel, OrderRepository (interface), OrderDomainService
+infrastructure/
+  persistence/
+    user/          ← UserRepositoryImpl, UserJpaRepository, UserJpaEntity
+    order/         ← OrderRepositoryImpl, OrderJpaRepository, OrderJpaEntity
+```
+
+- **A change to one layer should not ripple to all others.** If adding a field requires touching all 4 layers simultaneously, the layer boundary is leaking — find and fix the abstraction gap.
+- **Infrastructure JPA entities and domain models are separate.** Map between them in the repository implementation. This costs a little code but buys you the freedom to change persistence schema without touching business logic.
+
 ## Implementation Workflow
 
 ### Starting a Feature

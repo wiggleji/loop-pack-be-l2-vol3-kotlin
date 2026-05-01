@@ -1,0 +1,66 @@
+============================================================
+Ranking System Benchmark (HEAVY) — 2026-04-09T13:39:55.221Z
+============================================================
+
+[ Scenarios ]
+
+  ranking_read_light:
+    executor:  constant-vus (100 VUs, 45s)
+    endpoint:  GET /api/v1/rankings?page=1&size=20
+    purpose:   랭킹 페이지 조회 기본 부하 (2× base)
+
+  product_detail_rank:
+    executor:  constant-vus (200 VUs, 45s)
+    endpoint:  GET /api/v1/products/{id}
+    purpose:   상품 상세 + rank enrichment (2× base, 1000 products)
+
+  ranking_read_heavy:
+    executor:  ramping-vus (0→400→0, 30s, starts at 50s)
+    purpose:   랭킹 페이지 동시 조회 폭증 (2× base)
+
+  ranking_deep_page:
+    executor:  constant-vus (60 VUs, 20s, starts at 85s)
+    endpoint:  GET /api/v1/rankings?page={1..10}&size=50
+    purpose:   deep pagination 오버헤드 (2× depth)
+
+[ Thresholds ]
+    http_req_failed: rate < 0.05
+    ranking_page:    p(95)<500ms, p(99)<1000ms
+    product_detail:  p(95)<800ms, p(99)<1500ms
+
+[ Target ]  http://localhost:8080
+[ Products ] id=1..1028
+[ ZSET entries ] 1000
+
+============================================================
+     ✓ ranking_light: 200
+     ✗ detail: 200
+      ↳  97% — ✓ 77924 / ✗ 2182
+     ✓ ranking_heavy: 200
+     ✓ ranking_deep: 200
+
+     checks.........................: 98.84% ✓ 187343      ✗ 2182  
+     data_received..................: 447 MB 4.3 MB/s
+     data_sent......................: 18 MB  172 kB/s
+     http_req_blocked...............: avg=15.73µs   min=0s       med=2µs      max=66.09ms  p(90)=3µs      p(95)=4µs    
+     http_req_connecting............: avg=10.75µs   min=0s       med=0s       max=63.03ms  p(90)=0s       p(95)=0s     
+     http_req_duration..............: avg=8.56ms    min=1.38ms   med=6.55ms   max=244.98ms p(90)=14.84ms  p(95)=18.55ms
+       { expected_response:true }...: avg=8.47ms    min=1.38ms   med=6.44ms   max=244.98ms p(90)=14.66ms  p(95)=18.34ms
+     ✓ { name:product_detail }......: avg=12.19ms   min=1.66ms   med=10.65ms  max=244.98ms p(90)=17.13ms  p(95)=21.46ms
+     ✓ { name:ranking_page }........: avg=5.9ms     min=1.38ms   med=4.24ms   max=211.58ms p(90)=9.84ms   p(95)=15.05ms
+   ✓ http_req_failed................: 1.15%  ✓ 2182        ✗ 187343
+     http_req_receiving.............: avg=68.66µs   min=4µs      med=35µs     max=8.82ms   p(90)=152µs    p(95)=195µs  
+     http_req_sending...............: avg=6.74µs    min=1µs      med=4µs      max=1.92ms   p(90)=10µs     p(95)=19µs   
+     http_req_tls_handshaking.......: avg=0s        min=0s       med=0s       max=0s       p(90)=0s       p(95)=0s     
+     http_req_waiting...............: avg=8.48ms    min=1.32ms   med=6.46ms   max=244.78ms p(90)=14.79ms  p(95)=18.46ms
+     http_reqs......................: 189525 1802.197463/s
+     iteration_duration.............: avg=130.65ms  min=101.41ms med=107.66ms max=722.05ms p(90)=124.36ms p(95)=222.6ms
+     iterations.....................: 189525 1802.197463/s
+     product_detail_latency_ms......: avg=12.070164 min=1.669    med=10.58    max=244.981  p(90)=16.833   p(95)=21.021 
+     product_detail_ok..............: 77924  740.981058/s
+     product_detail_with_rank.......: 77924  740.981058/s
+     ranking_read_latency_ms........: avg=5.90688   min=1.383    med=4.246    max=211.581  p(90)=9.849    p(95)=15.0581
+     ranking_read_ok................: 109419 1040.467718/s
+     read_success_rate..............: 98.81% ✓ 181696      ✗ 2182  
+     vus............................: 60     min=0         max=400 
+     vus_max........................: 700    min=700       max=700 

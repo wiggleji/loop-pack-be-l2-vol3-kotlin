@@ -249,6 +249,42 @@ sequenceDiagram
 - Integration Tests: [목록]
 ```
 
+## 도메인 & 객체 설계 전략
+
+- **도메인 객체는 비즈니스 규칙을 소유합니다.** "이 주문은 취소 가능한가?", "이 비밀번호는 유효한가?"와 같은 판단은 서비스가 아닌 도메인 객체(`Order.cancel()`, `User.validatePassword()`)에 위치해야 합니다. 서비스에 도메인 규칙이 집중되면 변경의 병목이 됩니다.
+- **애플리케이션 서비스는 조율(orchestration)에 집중합니다.** 예를 들어 `PlaceOrderService`는 사용자 자격 확인, 재고 예약, 결제 요청을 순서에 맞게 조율하지만, "자격이 있다"는 기준은 직접 정의하지 않습니다. 그 기준은 도메인 객체가 결정합니다.
+- **서비스에서의 중복 로직은 경고 신호입니다.** `OrderService`와 `ReviewService` 양쪽에서 "사용자가 활성 상태인지" 확인한다면, 해당 규칙은 `UserModel.requireActive()`로 이전해야 합니다. 두 곳에 나뉘어진 규칙은 반드시 서로 다르게 진화합니다.
+- **각 기능에 대해 의도를 먼저 확인합니다.** 구현 전에 반드시 명확히 결정하세요: 이것은 도메인 규칙(모델에 위치)인가, 아니면 조합 단계(서비스에 위치)인가? 결정 사항은 주간 노트에 기록합니다. 모호하게 남겨진 의도는 기술 부채가 됩니다.
+- **도메인 객체는 프레임워크에 무관해야 합니다.** 도메인 모델에 Spring 애노테이션이나 JPA 의존성이 침투하면 비즈니스 로직이 인프라 선택에 묶입니다. 순수한 Kotlin 도메인 모델을 지향하고, 영속성 매핑은 인프라 레이어에 격리합니다.
+
+## 아키텍처, 패키지 구성 전략
+
+> **DIP(의존성 역전 원칙)는 VIP입니다 — 위반은 빌드를 막는 심각한 문제로 간주합니다.**
+
+- **의존성 방향은 항상 안쪽(도메인)을 향합니다:** `Interfaces → Application → Domain ← Infrastructure`. `Domain` 레이어는 Spring, JPA, HTTP를 전혀 알지 못합니다. `Infrastructure`가 `Domain`의 인터페이스를 구현하며 Domain에 의존합니다 — 절대 반대 방향이 되어서는 안 됩니다.
+- **API DTO와 애플리케이션 DTO는 분리합니다.** `SignupRequest`/`UserResponse`(HTTP 관심사)는 `interfaces/api/`에, `CreateUserCommand`/`UserResult`(유스케이스 관심사)는 `application/`에 위치합니다. 두 계층의 DTO를 혼용하면 API 계약과 유스케이스 로직이 강하게 결합되어 독립적인 변경이 어려워집니다.
+- **4개 레이어 패키지를 두고, 각 레이어 하위에 도메인별로 패키징합니다:**
+
+```
+interfaces/
+  api/
+    user/          ← UserV1Controller, SignupRequest, UserResponse
+    order/         ← OrderV1Controller, PlaceOrderRequest, OrderResponse
+application/
+  user/            ← CreateUserUseCase, CreateUserCommand, UserResult
+  order/           ← PlaceOrderUseCase, PlaceOrderCommand, OrderResult
+domain/
+  user/            ← UserModel, UserRepository (인터페이스), UserDomainService
+  order/           ← OrderModel, OrderRepository (인터페이스), OrderDomainService
+infrastructure/
+  persistence/
+    user/          ← UserRepositoryImpl, UserJpaRepository, UserJpaEntity
+    order/         ← OrderRepositoryImpl, OrderJpaRepository, OrderJpaEntity
+```
+
+- **하나의 레이어 변경이 모든 레이어로 파급되면 안 됩니다.** 필드 하나를 추가했을 때 4개 레이어를 모두 수정해야 한다면 레이어 경계가 새고 있다는 신호입니다 — 추상화의 빈틈을 찾아 수정합니다.
+- **인프라의 JPA 엔티티와 도메인 모델은 분리합니다.** 리포지토리 구현체에서 두 객체 간 변환을 담당합니다. 코드가 조금 늘어나지만, 영속성 스키마 변경이 비즈니스 로직에 영향을 주지 않게 됩니다.
+
 ## 구현 워크플로우
 
 ### 새 기능 시작 시

@@ -21,8 +21,32 @@ spring:
     import:
       - jpa.yml
       - redis.yml
+      - kafka.yml
       - logging.yml
       - monitoring.yml
+
+pg:
+  client:
+    base-url: http://localhost:8082
+    connect-timeout: 1000
+    read-timeout: 2000
+
+resilience4j:
+  retry:
+    instances:
+      pgPayment:
+        maxAttempts: 3
+        waitDuration: 200ms
+        retryExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+  circuitbreaker:
+    instances:
+      pgPayment:
+        slidingWindowSize: 10
+        failureRateThreshold: 70
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
 
 springdoc:
   use-fqn: true
@@ -33,7 +57,11 @@ springdoc:
 spring:
   config:
     activate:
-      on-profile: local, test
+      on-profile: test
+
+queue:
+  scheduler:
+    enabled: false
 
 ---
 spring:

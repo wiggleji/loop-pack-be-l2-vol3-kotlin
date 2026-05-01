@@ -9,13 +9,13 @@
 - [x] 필요 정보 : { 로그인 ID, 비밀번호, 이름, 생년월일, 이메일 }
 - [x] 이미 가입된 로그인 ID 로는 가입이 불가능함 → `CONFLICT (409)`
 - [x] 각 정보 포맷 검증
-  - 이름 : blank 체크 (`UserModel` init)
-  - 이메일 : `xx@yy` regex (`UserService.validateEmail`)
-  - 생년월일 : 미래일 불가 (`UserModel` init), 형식 오류 시 Jackson 역직렬화 단계에서 `400`
+  - 이름 : blank 체크 (`User` init)
+  - 이메일 : `xx@yy` regex (`Email` Value Object)
+  - 생년월일 : 미래일 불가 (`UserService.validateBirthDate`), 형식 오류 시 Jackson 역직렬화 단계에서 `400`
 - [x] 비밀번호 암호화 저장 → BCrypt (`PasswordEncoder.encode`)
 - [x] 비밀번호 RULE
-  - 8~16자, 영문 대소문자 / 숫자 / 특수문자만 → regex + length (`UserService.validatePassword`)
-  - 생년월일 포함 불가 → yyyyMMdd / yyMMdd / MMdd 패턴 체크
+  - 8~16자, 영문 대소문자 / 숫자 / 특수문자만 → regex + length (`Password` Value Object)
+  - 생년월일 포함 불가 → yyyyMMdd / yyMMdd / MMdd 패턴 체크 (`Password.validateNoBirthDatePattern`)
 
 ### 내 정보 조회
 
@@ -26,7 +26,7 @@
 ### 비밀번호 수정
 
 - [x] 필요 정보 : { 기존 비밀번호, 새 비밀번호 }
-- [x] 비밀번호 RULE 동일 적용 → `validatePassword`
+- [x] 비밀번호 RULE 동일 적용 → `Password.create()`
 - [x] 현재 비밀번호 재사용 불가 → `passwordEncoder.matches` 비교
 
 ---
@@ -34,23 +34,29 @@
 ## 구현 구조
 
 ```
+application/auth/
+  AuthFacade.kt               — 인증 유스케이스 조율 (signup, authenticate, changePassword)
+
 domain/user/
-  UserModel.kt              — JPA @Entity, init 검증 (blank, 미래일)
-  UserService.kt            — 비즈로직, 유효성 검증, 암호화
-  UserRepository.kt         — 도메인 Repository 인터페이스
-  UserPasswordEncoder.kt    — @Component, BCryptPasswordEncoder 래퍼
+  User.kt                     — 도메인 엔티티 (JPA 비의존, blank 검증 + updatePassword)
+  Email.kt                    — 이메일 Value Object (포맷 자가 검증)
+  Password.kt                 — 비밀번호 Value Object (길이/포맷/생년월일 패턴 검증)
+  UserService.kt              — CRUD 도메인 서비스 (userId/birthDate 검증, 중복 체크)
+  UserRepository.kt           — 도메인 Repository 인터페이스 (User 기준)
+  UserPasswordEncoder.kt      — @Component, BCryptPasswordEncoder 래퍼
 
 infrastructure/user/
-  UserJpaRepository.kt      — JpaRepository
-  UserRepositoryImpl.kt     — Repository 구현체
+  UserEntity.kt               — JPA @Entity (toDomain/from 매핑)
+  UserJpaRepository.kt        — JpaRepository<UserEntity, Long>
+  UserRepositoryImpl.kt       — Repository 구현체 (UserEntity ↔ User 매핑)
 
 interfaces/api/user/
-  UserV1ApiSpec.kt          — OpenAPI 스펙 인터페이스
-  UserV1Controller.kt       — REST 컨트롤러 (Service 직접 호출, Facade 없음)
-  UserV1Dto.kt              — SignupRequest / UserChangePasswordRequest / UserResponse
+  UserV1ApiSpec.kt            — OpenAPI 스펙 인터페이스
+  UserV1Controller.kt         — REST 컨트롤러 (AuthFacade 호출)
+  UserV1Dto.kt                — SignupRequest / UserChangePasswordRequest / UserResponse
 
 interfaces/api/security/
-  AuthHeader.kt             — 로그인 헤더 상수 정의 (HEADER_LOGIN_ID, HEADER_LOGIN_PW)
+  AuthHeader.kt               — 로그인 헤더 상수 정의 (HEADER_LOGIN_ID, HEADER_LOGIN_PW)
 ```
 
 ### 클래스 관계 다이어그램
@@ -67,7 +73,7 @@ classDiagram
             +changePassword(UserChangePasswordRequest)
         }
         class UserV1Controller {
-            -userService : UserService
+            -authFacade : AuthFacade
         }
         class SignupRequest {
             <<data class>>
@@ -88,22 +94,31 @@ classDiagram
             +name String
             +birthDate LocalDate
             +email String
-            +from(UserModel)$
-            +fromMasked(UserModel)$
+            +from(User)$
+            +fromMasked(User)$
+        }
+    }
+
+    namespace Application_Auth {
+        class AuthFacade {
+            -userService : UserService
+            -passwordEncoder : PasswordEncoder
+            +signup() User
+            +authenticate() User
+            +changePassword()
         }
     }
 
     namespace Domain_User {
         class UserService {
             -userRepository : UserRepository
-            -passwordEncoder : PasswordEncoder
-            +createUser() UserModel
-            +getUserByUserId() UserModel
-            +authenticate() UserModel
-            +changePassword()
+            +createUser() User
+            +getUserByUserId() User
+            +findByUserId() User?
+            +save() User
         }
-        class UserModel {
-            <<entity>>
+        class User {
+            +id Long
             +userId String
             +encryptedPassword String
             +name String
@@ -111,16 +126,19 @@ classDiagram
             +email String
             +updatePassword()
         }
-        class BaseEntity {
-            <<abstract>>
-            +id Long
-            +createdAt ZonedDateTime
-            +updatedAt ZonedDateTime
+        class Email {
+            <<value object>>
+            +value String
+        }
+        class Password {
+            <<value object>>
+            +value String
+            +create(rawPassword, birthDate)$ Password
         }
         class UserRepository {
             <<interface>>
-            +save(UserModel) UserModel
-            +findByUserId(String) UserModel?
+            +save(User) User
+            +findByUserId(String) User?
             +existsByUserId(String) Boolean
         }
         class UserPasswordEncoder {
@@ -130,35 +148,58 @@ classDiagram
         }
     }
 
-    namespace Infrastructure_Persistence_User {
+    namespace Infrastructure_User {
+        class UserEntity {
+            <<entity>>
+            +userId String
+            +encryptedPassword String
+            +name String
+            +birthDate LocalDate
+            +email String
+            +toDomain() User
+            +from(User)$ UserEntity
+            +updatePassword()
+        }
+        class BaseEntity {
+            <<abstract>>
+            +id Long
+            +createdAt ZonedDateTime
+            +updatedAt ZonedDateTime
+        }
         class UserRepositoryImpl {
             -jpaRepository : UserJpaRepository
         }
         class UserJpaRepository {
             <<interface>>
-            +findByUserId(String) UserModel?
+            +findByUserId(String) UserEntity?
             +existsByUserId(String) Boolean
         }
     }
 
-    %% Relationships & Flow
+    %% Interfaces → Application
     UserV1Controller ..|> UserV1ApiSpec : implements
-    UserV1Controller --> UserService : calls
-    
+    UserV1Controller --> AuthFacade : calls
     UserV1Controller ..> SignupRequest : uses
     UserV1Controller ..> UserChangePasswordRequest : uses
     UserV1Controller ..> UserResponse : returns
-    UserResponse ..> UserModel : maps from
+    UserResponse ..> User : maps from
 
+    %% Application → Domain
+    AuthFacade --> UserService : delegates CRUD
+    AuthFacade --> UserPasswordEncoder : encrypt/verify
+    AuthFacade ..> Email : validates
+    AuthFacade ..> Password : validates
+
+    %% Domain
     UserService --> UserRepository : uses
-    UserService --> UserPasswordEncoder : uses
-    UserService ..> UserModel : manages
+    UserService ..> User : manages
 
-    UserModel --|> BaseEntity : inherits
-    
+    %% Infrastructure
+    UserEntity --|> BaseEntity : inherits
+    UserEntity ..> User : toDomain/from
     UserRepositoryImpl ..|> UserRepository : implements
     UserRepositoryImpl --> UserJpaRepository : uses
-    UserJpaRepository ..> UserModel : manages
+    UserJpaRepository ..> UserEntity : manages
 ```
 
 ### 요청 플로우
@@ -167,6 +208,9 @@ classDiagram
 sequenceDiagram
     participant C as Client
     participant Ctrl as Controller
+    participant Facade as AuthFacade
+    participant Email as Email VO
+    participant Pw as Password VO
     participant Svc as UserService
     participant Enc as PasswordEncoder
     participant Repo as Repository
@@ -174,97 +218,139 @@ sequenceDiagram
     rect rgb(220, 235, 255)
     Note over C,Repo: POST /api/v1/users/signup
         C->>Ctrl: SignupRequest
-        Ctrl->>Svc: createUser()
+        Ctrl->>Facade: signup()
+        Facade->>Email: Email(email)
+        Note over Email: 포맷 검증
+        Facade->>Pw: Password.create(rawPw, birthDate)
+        Note over Pw: 길이/포맷/생년월일 검증
+        Facade->>Enc: encode(password.value)
+        Enc-->>Facade: encryptedPassword
+        Facade->>Svc: createUser(userId, encryptedPw, ..., email.value)
+        Svc->>Svc: validateUserId / validateBirthDate
         Svc->>Repo: existsByUserId()
         Repo-->>Svc: false
-        Svc->>Svc: validateUserId / validateEmail / validatePassword
-        Svc->>Enc: encode(password)
-        Enc-->>Svc: encryptedPassword
-        Svc->>Repo: save(UserModel)
-        Repo-->>Svc: saved
-        Svc-->>Ctrl: UserModel
+        Svc->>Repo: save(User)
+        Note over Repo: UserEntity.from(user) → JPA save → toDomain()
+        Repo-->>Svc: User
+        Svc-->>Facade: User
+        Facade-->>Ctrl: User
         Ctrl-->>C: 200 UserResponse
     end
 
     rect rgb(220, 255, 220)
     Note over C,Repo: GET /api/v1/users/me
         C->>Ctrl: Headers (LoginId, LoginPw)
-        Ctrl->>Svc: authenticate()
+        Ctrl->>Facade: authenticate()
+        Facade->>Svc: findByUserId()
         Svc->>Repo: findByUserId()
-        Repo-->>Svc: UserModel
-        Svc->>Enc: matches(password, encrypted)
-        Enc-->>Svc: true
-        Svc-->>Ctrl: UserModel
+        Repo-->>Svc: User
+        Svc-->>Facade: User
+        Facade->>Enc: matches(rawPw, encrypted)
+        Enc-->>Facade: true
+        Facade-->>Ctrl: User
         Ctrl-->>C: 200 UserResponse (name masked)
     end
 
     rect rgb(255, 235, 220)
     Note over C,Repo: PUT /api/v1/users/password
-        C->>Ctrl: Headers + UserChangePasswordRequest
+        C->>Ctrl: Headers + ChangePasswordRequest
         Note right of Ctrl: 1. 요청자 인증
-        Ctrl->>Svc: authenticate()
-        Svc->>Repo: findByUserId()
-        Repo-->>Svc: UserModel
-        Svc->>Enc: matches(loginPw, encrypted)
-        Enc-->>Svc: true
-        Svc-->>Ctrl: UserModel
+        Ctrl->>Facade: authenticate()
+        Facade-->>Ctrl: User
         Note right of Ctrl: 2. 비밀번호 변경
-        Ctrl->>Svc: changePassword()
-        Svc->>Repo: findByUserId()
-        Repo-->>Svc: UserModel
-        Svc->>Enc: matches(oldPassword, encrypted)
-        Enc-->>Svc: true
-        Svc->>Svc: validatePassword(newPassword)
-        Svc->>Enc: matches(newPassword, encrypted)
-        Enc-->>Svc: false (현재와 다름)
-        Svc->>Enc: encode(newPassword)
-        Enc-->>Svc: newEncryptedPassword
-        Svc->>Repo: save(updated UserModel)
-        Repo-->>Svc: saved
-        Svc-->>Ctrl: void
+        Ctrl->>Facade: changePassword()
+        Facade->>Svc: getUserByUserId()
+        Svc-->>Facade: User
+        Facade->>Enc: matches(oldPw, encrypted)
+        Enc-->>Facade: true (기존 비밀번호 확인)
+        Facade->>Pw: Password.create(newPw, birthDate)
+        Note over Pw: 신규 비밀번호 유효성 검증
+        Facade->>Enc: matches(newPw, encrypted)
+        Enc-->>Facade: false (현재와 다름 확인)
+        Facade->>Enc: encode(newPw)
+        Enc-->>Facade: newEncryptedPw
+        Facade->>Facade: user.updatePassword(newEncryptedPw)
+        Facade->>Svc: save(user)
+        Svc->>Repo: save(user)
+        Note over Repo: getReferenceById → updatePassword (dirty checking)
+        Repo-->>Svc: User
+        Svc-->>Facade: User
+        Facade-->>Ctrl: void
         Ctrl-->>C: 200 success
     end
 ```
 
 ### 핵심 설계 결정
 
-- **Facade 없음** : Week 1은 단일 Service 호출이므로 Controller → Service 직접 연결
-- **JPA Entity = Domain Model** : `UserModel`이 하나로 통합. 복잡도가 올라오면 분리 검토
+- **AuthFacade 도입** : Controller → AuthFacade → UserService 구조. 인증/검증 흐름을 Application Layer에서 조율하고, UserService는 순수 CRUD만 담당
+- **JPA Entity ↔ Domain Entity 분리** : `UserEntity`(JPA) + `User`(도메인). Repository 구현체에서 `toDomain()`/`from()`으로 매핑
+- **Value Object** : `Email`, `Password`가 생성 시점에 자가 검증. 유효하지 않은 상태의 인스턴스가 존재할 수 없음
 - **PasswordEncoder** : Bean이 아닌 `@Component`로 관리 (`domain/user/UserPasswordEncoder`)
-- **인증** : Spring Security 필터 아닌 커스턴 헤더 (`X-Loopers-LoginId / Pw`) → Controller에서 수동 처리
+- **인증** : Spring Security 필터 아닌 커스텀 헤더 (`X-Loopers-LoginId / Pw`) → AuthFacade에서 처리
+- **Timing attack 방지** : 사용자 미존재 시에도 BCrypt 연산을 수행하여 응답 시간 차이를 제거
 - **마스킹** : `String.mask()` private extension function in `UserResponse` companion. 추후 security 모듈로 이동 예정
 
 ---
 
 ## 테스트 커버리스트
 
+### 단위 테스트 — `PasswordUnitTest`
+
+| 영역 | 테스트 케이스 |
+|---|---|
+| 길이 검증 | 8자 미만 실패, 18자 초과 실패, 정확히 8자 성공, 정확히 16자 성공 |
+| 포맷 검증 | 한글 포함 실패, 특수문자 포함 성공 |
+| 생년월일 검증 | yyyyMMdd 포함 실패, yyMMdd 포함 실패, MMdd 포함 실패, 미포함 성공 |
+
+### 단위 테스트 — `EmailUnitTest`
+
+| 영역 | 테스트 케이스 |
+|---|---|
+| 포맷 검증 | 유효 이메일 성공, 특수문자(+/./\_) 성공, @ 미포함 실패, 도메인 없음 실패, 로컬파트 없음 실패 |
+
+### 단위 테스트 — `UserTest`
+
+- 정상 생성, blank 파라미터 실패
+- updatePassword: blank 실패, 유효한 값 성공
+
 ### 단위 테스트 — `UserServiceUnitTest` (MockK)
 
 | 영역 | 테스트 케이스 |
 |---|---|
 | createUser — userId | 특수문자 포함 실패, 한글 포함 실패, 영숫자만 성공 |
-| createUser — password | 8자 미만, 16자 초과, 정확히 8자, 정확히 16자, birthDate(yyyyMMdd/yyMMdd/MMdd) 포함 실패, birthDate 미포함 성공 |
-| createUser — email | 형식 오류 실패, 유효 형식 성공 |
+| createUser — birthDate | 미래 실패, 오늘 성공, 과거 성공 |
 | createUser — duplicate | 중복 userId → CONFLICT |
+| createUser — success | 유효 데이터로 생성 성공 |
 | getUserByUserId | 존재하지 않는 ID → NOT_FOUND |
-| authenticate | 존재하지 않는 유저 → UNAUTHORIZED, 틀린 비밀번호 → UNAUTHORIZED (Spy) |
+| findByUserId | null 반환, 존재 시 반환 |
+| save | repository 위임 확인 |
+
+### 단위 테스트 — `AuthFacadeUnitTest` (MockK + SpyK)
+
+| 영역 | 테스트 케이스 |
+|---|---|
+| signup | 정상 생성, 이메일 형식 실패, 비밀번호 too short/long, birthDate 포함 실패, 유효 이메일 성공, 8자/16자 경계값 성공 |
+| authenticate | 정상 인증, 틀린 비밀번호 UNAUTHORIZED (Spy), 미존재 유저 UNAUTHORIZED, timing attack 방지 검증 (Spy) |
 | changePassword | 성공(Mock verify), 기존 비밀번호 불일치, 새 비밀번호 too short, birthDate 포함, 현재와 동일 |
 
-### 단위 테스트 — `UserModelTest`
+### 통합 테스트 — `AuthFacadeTest`
 
-- 정상 생성, blank 파라미터 실패
+- signup: 정상 저장, 암호화 검증, 이메일 형식 실패, 비밀번호 too short, birthDate 포함 실패
+- authenticate: 정상 인증, 미존재 ID 실패, 틀린 비밀번호 실패
+- changePassword: 정상 변경 + 새 비밀번호로 인증, 기존 비밀번호 불일치, 현재와 동일, too short
+- 경계값: 8자/16자 비밀번호 성공
 
-### 통합 테스트 — `UserServiceTest` (SpyBean)
+### 통합 테스트 — `UserServiceTest`
 
-- createUser 정상 저장, 암호화 검증, save() spy 검증, 중복 ID 실패
-- getUserByUserId 조회
-- authenticate 정상 인증
-- changePassword + 새 비밀번호로 인증
+- createUser: 정상 저장, 중복 ID 실패, 특수문자 userId 실패, 미래 birthDate 실패
+- getUserByUserId: 조회 성공, NOT_FOUND
+- findByUserId: null 반환
+- save: 비밀번호 변경 후 저장 확인
 
 ### 통합 테스트 — `UserRepositoryTest`
 
 - findByUserId (존재 / 존재하지 않음 → null)
-- existsByUserId (존재 시 true)
+- existsByUserId (존재 시 true / 미존재 시 false)
 
 ### E2E 테스트 — `UserV1ApiE2ETest`
 

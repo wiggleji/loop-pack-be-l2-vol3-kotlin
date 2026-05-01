@@ -1,6 +1,6 @@
 package com.loopers.interfaces.api.user
 
-import com.loopers.domain.user.UserModel
+import com.loopers.infrastructure.user.UserEntity
 import com.loopers.infrastructure.user.UserJpaRepository
 import com.loopers.interfaces.api.ApiResponse
 import com.loopers.utils.DatabaseCleanUp
@@ -26,7 +26,7 @@ class UserV1ApiE2ETest @Autowired constructor(
     private val databaseCleanUp: DatabaseCleanUp,
 ) {
     companion object {
-        private const val ENDPOINT_SIGNUP = "/api/v1/users/signup"
+        private const val ENDPOINT_SIGNUP = "/api/v1/users"
         private const val ENDPOINT_ME = "/api/v1/users/me"
         private const val ENDPOINT_PASSWORD = "/api/v1/users/password"
     }
@@ -51,9 +51,9 @@ class UserV1ApiE2ETest @Autowired constructor(
         name: String = "testName",
         birthDate: LocalDate = LocalDate.of(1990, 1, 1),
         email: String = "test@email.com",
-    ): UserModel {
+    ): UserEntity {
         return userJpaRepository.save(
-            UserModel(
+            UserEntity(
                 userId = userId,
                 encryptedPassword = passwordEncoder.encode(password),
                 name = name,
@@ -63,9 +63,9 @@ class UserV1ApiE2ETest @Autowired constructor(
         )
     }
 
-    // ─── POST /api/v1/users/signup ───
+    // ─── POST /api/v1/users ───
 
-    @DisplayName("POST /api/v1/users/signup")
+    @DisplayName("POST /api/v1/users")
     @Nested
     inner class Signup {
 

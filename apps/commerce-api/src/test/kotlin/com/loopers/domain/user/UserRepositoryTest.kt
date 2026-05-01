@@ -9,12 +9,11 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ActiveProfiles
 import java.time.LocalDate
 
-
 @SpringBootTest
 @ActiveProfiles("test")
 class UserRepositoryTest @Autowired constructor(
     private val userRepository: UserRepository,
-    private val databaseCleanUp: DatabaseCleanUp
+    private val databaseCleanUp: DatabaseCleanUp,
 ) {
 
     @AfterEach
@@ -25,12 +24,12 @@ class UserRepositoryTest @Autowired constructor(
     @Test
     fun findByUserId_returnsUserByUserId() {
         // Arrange
-        val user = UserModel(
+        val user = User(
             userId = "testId",
             encryptedPassword = "testPassword",
             name = "testName",
             birthDate = LocalDate.now(),
-            email = "test@email.com"
+            email = "test@email.com",
         )
 
         // Act
@@ -45,8 +44,6 @@ class UserRepositoryTest @Autowired constructor(
 
     @Test
     fun findByUserId_returnsNullWhenUserNotFound() {
-        // Arrange
-
         // Act
         val notFound = userRepository.findByUserId("user_not_found")
 
@@ -58,12 +55,12 @@ class UserRepositoryTest @Autowired constructor(
     fun existsByUserId_returnsTrueIfUserIdExists() {
         // Arrange
         userRepository.save(
-            UserModel(
+            User(
                 userId = "testId",
                 encryptedPassword = "testPassword",
                 name = "testName",
                 birthDate = LocalDate.now(),
-                email = "test@email.com"
+                email = "test@email.com",
             )
         )
 
@@ -76,9 +73,6 @@ class UserRepositoryTest @Autowired constructor(
 
     @Test
     fun existsByUserId_returnsFalseIfUserIdDoesNotExist() {
-        // Arrange
-        // No user saved - database is clean
-
         // Act
         val existsByUserId = userRepository.existsByUserId(userId = "nonExistentUser")
 

@@ -1,6 +1,6 @@
 package com.loopers.interfaces.api.user
 
-import com.loopers.domain.user.UserModel
+import com.loopers.domain.user.User
 import java.time.LocalDate
 
 /**
@@ -33,7 +33,7 @@ class UserV1Dto {
         val email: String,
     ) {
         companion object {
-            fun from(user: UserModel): UserResponse {
+            fun from(user: User): UserResponse {
                 return UserResponse(
                     userId = user.userId,
                     name = user.name,
@@ -42,7 +42,7 @@ class UserV1Dto {
                 )
             }
 
-            fun fromMasked(user: UserModel): UserResponse {
+            fun fromMasked(user: User): UserResponse {
                 return UserResponse(
                     userId = user.userId,
                     name = user.name.mask(),

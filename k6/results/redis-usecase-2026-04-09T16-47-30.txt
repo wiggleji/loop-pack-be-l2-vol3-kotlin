@@ -1,0 +1,50 @@
+============================================================
+Redis Use-Case Benchmark — 2026-04-09T16:47:30.842Z
+============================================================
+
+[ Phase 1 — Cache (String) ]
+  cache_warmup:   1 VU × 50 iters — cold start (cache miss)
+  cache_hit:      50 VUs, 15s — warm cache (cache hit)
+
+[ Phase 2 — Ranking (Sorted Set) ]
+  ranking_read:   0→100→0 VUs, 25s — ZREVRANGE Top-N
+  detail_with_rank: 100 VUs, 20s — product detail + ZREVRANK
+
+[ Phase 3 — Mixed Traffic ]
+  mixed_traffic:  0→200→0 VUs, 30s
+  distribution:   60% detail, 25% ranking, 15% list
+
+[ Target ]  http://localhost:8080
+[ Products ] id=1..1028
+
+============================================================
+     ✓ cache_hit: 200
+     ✗ detail_rank: 200
+      ↳  97% — ✓ 17883 / ✗ 499
+     ✓ ranking: 200
+
+   ✓ cache_hit_latency_ms...........: avg=10.651678 min=2.206   med=9.987   max=39.851   p(90)=15.4778  p(95)=17.725  
+     cache_hit_rate.................: 100.00% ✓ 6753       ✗ 0     
+     cache_miss_latency_ms..........: avg=11.85514  min=5.909   med=11.2735 max=21.1     p(90)=14.6616  p(95)=16.69215
+     checks.........................: 98.87%  ✓ 43851      ✗ 499   
+     data_received..................: 213 MB  2.7 MB/s
+     data_sent......................: 12 MB   154 kB/s
+     detail_with_rank_latency_ms....: avg=8.858119  min=1.642   med=8.477   max=51.913   p(90)=13.78    p(95)=15.9997 
+     http_req_blocked...............: avg=6.1µs     min=0s      med=1µs     max=6.42ms   p(90)=3µs      p(95)=4µs     
+     http_req_connecting............: avg=3.75µs    min=0s      med=0s      max=5.17ms   p(90)=0s       p(95)=0s      
+     http_req_duration..............: avg=7.25ms    min=1ms     med=6.36ms  max=116.96ms p(90)=12.72ms  p(95)=14.69ms 
+       { expected_response:true }...: avg=7.16ms    min=1ms     med=6.26ms  max=116.96ms p(90)=12.56ms  p(95)=14.49ms 
+     ✓ { name:product_detail }......: avg=9.54ms    min=1.57ms  med=9.01ms  max=116.96ms p(90)=13.99ms  p(95)=16.02ms 
+     ✓ { name:ranking_page }........: avg=4.06ms    min=1.21ms  med=3.41ms  max=96.88ms  p(90)=6ms      p(95)=8.59ms  
+   ✓ http_req_failed................: 1.44%   ✓ 1896       ✗ 129590
+     http_req_receiving.............: avg=76.13µs   min=4µs     med=67µs    max=3.91ms   p(90)=145µs    p(95)=172µs   
+     http_req_sending...............: avg=6.73µs    min=1µs     med=4µs     max=2.1ms    p(90)=10µs     p(95)=16µs    
+     http_req_tls_handshaking.......: avg=0s        min=0s      med=0s      max=0s       p(90)=0s       p(95)=0s      
+     http_req_waiting...............: avg=7.16ms    min=955µs   med=6.27ms  max=116.95ms p(90)=12.65ms  p(95)=14.63ms 
+     http_reqs......................: 131486  1643.08497/s
+     iteration_duration.............: avg=74.31ms   min=51.03ms med=60.01ms max=168.43ms p(90)=109.72ms p(95)=112.22ms
+     iterations.....................: 131486  1643.08497/s
+     mixed_latency_ms...............: avg=7.224302  min=1.003   med=6.325   max=116.968  p(90)=12.402   p(95)=14.211  
+   ✓ ranking_latency_ms.............: avg=4.080886  min=1.21    med=3.078   max=25.805   p(90)=7.954    p(95)=10.4098 
+     vus............................: 2       min=0        max=200 
+     vus_max........................: 401     min=401      max=401 
